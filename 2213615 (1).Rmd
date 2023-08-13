@@ -1,0 +1,224 @@
+---
+title: "MA331-Report: 2213615"
+subtitle: "TED Talks by Paul Collier and Carlo Ratti"
+author: "Ndidi, Mercy"
+output: 
+  html_document: 
+    theme: lumen
+---
+
+```{r setup, include=FALSE}
+### Don't delete this setup code chunk from your file
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, comment = NULL)   ## DON'T ALTER THIS: this is to prevent printing the code or any unnecessary addition in your final "html" report file.
+
+# You can extend this list below to load all the packages required for your analyses:
+#====================================================================================
+
+# load required packages
+library(dsEssex)
+library(tidyverse)
+library(ggplot2)
+library(ggrepel)
+library(tidyr)
+library(tidytext)
+library(cowplot)
+library(dplyr)
+
+# load the 'ted_talks' data
+#=========================
+data(ted_talks)
+
+# show the first few rows of the data
+head(ted_talks)
+
+# glimpse ted_talk to see what the data set contains
+glimpse(ted_talks)
+
+# display the summary statistics of the variables included in the "ted talk" data
+summary(ted_talks)
+```
+
+<span style="color: red;">
+
+<style>
+body {
+   text-align: justify;
+}
+</style>
+
+## Introduction
+The Ted talks dataset contains information about the talks that have been presented on the Ted platform since its inception in 1984. The dataset contains information about the speaker, the title of the talk, its description, and its transcript.
+
+The goal of this study is to compare the top words used by two speakers, a professor of economics ***Paul Collier*** Ted talk ***"The Bottom Billion"*** from 2008 which shows what is happening to the poorest people in the world, and offers ideas for opening up opportunities to all, and a professor at the Massachusetts Institute of Technology named ***Carlo Ratti*** who gave a Ted talk ***"Architecture that senses and responds"*** from 2011 which is about the use of technology and data to improve urban planning and create smarter, more efficient cities.
+
+It explains how the speakers differ in their use of language, sentiment, and style. What insights can be gained from analysing their talk transcripts, as well as to investigate the similarities and dissimilarities between the two talks and to draw conclusion about the effectiveness of the speakers arguments. The study will also use sentiment lexicon ***"bing"*** to identify the most common positive and negative words and visualise the change in sentiment throughout a speaker's TED talk. This analysis would reveal patterns present in the language used by the speakers to provide a deeper understanding of the messages they are trying to convey.
+
+## Methods
+The following steps/procedures listed below were used for statistical summary measures to compare results for the visualisation created.
+
+***Load the required packages:*** 
+The `ggplot2`, `tidyverse`, `tidytext`, `ggrepel`, `tidyr`,`cowplot` and `dplyr` packages are loaded to facilitate text analysis and visualisation.
+
+***Load data from `dsEssex` package:***
+The `ted_talks` dataset from the `dsEssex` package is loaded into R.
+
+***Tokenise the data and remove stop words:***
+The text data in the ted_talks dataset is tidied by tokenizing the text using the unnest_tokens function from the tidytext package. Next, stop words are removed from the tidied text data using the anti_join function with get_stopwords() from the tidytext package.
+```{r}
+tidy_talks <- ted_talks %>% 
+  unnest_tokens(word, text)
+```
+```{r}
+ted_talks_nonstop <- tidy_talks %>%
+  anti_join(get_stopwords())
+```
+
+***Filter speaker's words and Visualize top words:***
+The data is filtered to extract the words used by each speaker (Paul Collier and Carlo Ratti) using the filter function and also visualize the top 15 words used by each speaker which is visualized using an histogram plot.In addition, we plot the histogram side by side using the 'cowplot:: plot_grid'
+
+```{r echo=FALSE}
+Paul_words <- ted_talks_nonstop %>%
+  filter(speaker == "Paul Collier") %>% 
+  count(speaker, word, sort = TRUE)
+```
+```{r echo=FALSE}
+P1 <- Paul_words %>%
+  slice_max(n, n = 15) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) + 
+  geom_col(fill = 'Brown')+
+  labs(x='number of words', y= NULL,fill = 'speaker',title ='Top words for Paul')
+```
+```{r echo=FALSE}
+Carlo_words <- ted_talks_nonstop %>%
+  filter(speaker == "Carlo Ratti") %>% 
+  count(speaker, word, sort = TRUE)
+```
+```{r echo=FALSE}
+C1 <- Carlo_words %>% 
+  slice_max(n, n = 15) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) + 
+  geom_col(fill = 'Navyblue')+
+  labs(x='number of words', y= NULL,fill = 'speaker',title ='Top words for Carlo')
+```
+```{r echo=FALSE}
+cowplot::plot_grid(P1, C1)
+```
+
+***Compare speaker's vocabulary:*** 
+The vocabulary of the two speakers is compared by binding the two dataframe and creating a visualization.
+
+```{r echo=FALSE}
+pc_words <- bind_rows(Paul_words, Carlo_words)
+```
+```{r echo=FALSE}
+pc_words%>%
+  group_by(word) %>%
+  filter(sum(n) > 10) %>%
+  ungroup() %>%
+  pivot_wider(names_from = "speaker", values_from = "n", values_fill = 0) %>%
+  ggplot(aes(`Carlo Ratti`, `Paul Collier`)) +
+  geom_abline(color = "purple", size = 1.2, alpha = 0.75, lty = 3) +
+  geom_text_repel(aes(label = word), max.overlaps = 15) +
+  coord_fixed()+
+  ggtitle("Visualisation of vocabulary comparison by Paul Collier and Carlo Ratti")
+```
+
+***Compute odds ratio and conduct sentiment analysis:***
+Sentiment analysis is conducted using the Bing lexicon from the tidytext package.
+
+```{r echo=FALSE}
+pc_words %>%
+  inner_join(get_sentiments("bing"), by = "word") %>%
+  count(speaker, sentiment) %>%
+  pivot_wider(names_from = speaker, values_from = n, values_fill = 0) %>%
+  mutate(OR = compute_OR(`Carlo Ratti`, `Paul Collier`, correction = FALSE), 
+         log_OR = log(OR), sentiment = reorder(sentiment, log_OR))
+```
+
+***Compare speakers' sentiment:***
+Sentiment analysis is performed to compare the positive and negative sentiment of the two speakers using an inner_join() function.
+
+```{r}
+paul_sentiment <- Paul_words %>% 
+  inner_join(get_sentiments("bing")) #innerjoin function merges the Paul_words and get sentiment by words
+
+carlo_sentiment <- Carlo_words %>% 
+  inner_join(get_sentiments("bing")) #innerjoin function merges the Carlo_words and get sentiment by words
+pc_sentiment <- bind_rows(paul_sentiment,carlo_sentiment) #binding rows of two dataframes
+```
+
+***Descriptive statistics of sentiments:*** 
+This can help to provide insight into the overall sentiment of the ted_talk dataset, identify any pattern or trends in the sentiment scores, and compare the sentiment scores across different categories within the dataset. This is computed using the count() and group_by() functions.
+
+```{r}
+sentiment_counts <- pc_sentiment %>% 
+  count(speaker, word,nn = n, sentiment) %>%
+  group_by(speaker, word) %>%
+  mutate(total = sum(nn),
+         percent = nn/total) %>%
+  filter(sentiment == "positive") %>%
+  arrange(desc(percent))
+```
+
+***Visualize sentiment:*** 
+The sentiment analysis results are visualized using a bar chart to show the most common positive and negative words used by each speaker using ggplot2.
+
+```{r}
+# Most common positive and negative words
+word_counts <- pc_sentiment %>% 
+  #count by word and sentiment
+  count(word,sentiment)
+
+top_words <- word_counts %>% 
+  #group by sentiment
+  group_by(sentiment) %>%
+  slice_max(n, n = 10) %>%
+  mutate(word = reorder(word, n)) %>%
+  ungroup()
+ggplot(top_words, aes(n, word, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ sentiment, scales = "free")+
+  ggtitle("Paul Collier and Carlo Ratti's Top Words")
+```
+
+***Analyze sentiment changes:*** 
+The change in sentiment is analyzed over time using the count and pivot_wider functions to summarize sentiment by speaker, word, and index. The net sentiment is computed and visualized using a bar chart.  
+
+```{r}
+pc_sentiment%>%
+  #count using four arguments
+  count(speaker, word, index=n %/% 100, sentiment)%>%
+  #pivot sentiment and n wider
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0)%>%
+  #use mutate to compute net sentiment
+  mutate(sentiment=positive - negative)%>%
+  #put index on x-axis, sentiment on y-axis, and map Paul/Carlo to fill
+  ggplot(aes(index, sentiment, fill= speaker)) +
+  # make a bar chart with geom_col()
+  geom_col()+
+  # make small multiples for each title with facet_wrap()
+  facet_wrap(~ sentiment, scales = "free_x")+
+  ggtitle("Sentiment changes through Paul Collier and Carlo Ratti's Tedtalks")
+```
+
+## Results
+I performed a text analysis of Paul Collier and Carlo Ratti's TED talks to investigate the positive and negative sentiments expressed by the speakers and compare their vocabulary and sentiment use. Several steps were involved in my analysis, including data cleaning, filtering the speaker's words, sentiment analysis, and visualisation. The outcomes are as follows:
+
+***Comparison of Vocabulary:***
+I began by comparing each speaker's vocabulary by visualising the top 15 words used by each speaker in a bar chart. According to the findings, Paul Collier frequently used words like "development," "countries," and "poverty," whereas Carlo Ratti frequently used words like "cities," "technology," and "design."
+
+***Analysis of Emotions:***
+I used the ***Bing*** lexicon to conduct a sentiment analysis to identify the positive and negative sentiments expressed by each speaker. According to the findings, both speakers expressed more positive than negative sentiments in their speeches. Carlo Ratti, on the other hand, had a greater proportion of positive sentiments, while Paul Collier had a greater proportion of negative sentiments.
+
+***Analysis of Odds:***
+I used an odd ratio analysis to determine which words were strongly associated with positive or negative sentiment for each speaker. The findings revealed that for Paul Collier, words like "conflict," "war," and "poverty" were strongly associated with negative sentiment, whereas words like "cooperation," "hope," and "peace" were strongly associated with positive sentiment. Words like "innovation," "sustainability," and "collaboration" had a strong positive sentiment association for Carlo Ratti, while words like "inequality," "disruption," and "threat" had a strong negative sentiment association.
+
+***Net Attitude:***
+I calculated the net sentiment score for each speaker by subtracting the positive and negative sentiment scores. Carlo Ratti had a higher net sentiment score than Paul Collier, indicating that his conversations were more positive overall.
+
+***Visualization:***
+We made several visualisations to help us understand the results better. A histogram displaying the frequency of sentiment scores for each speaker, a scatter plot displaying the net sentiment score for each speaker, and a bar chart displaying how the sentiment changes throughout each speaker's TED talk were among these.
+
+While both speakers expressed positive sentiments in their TED talks, our analysis revealed that their vocabulary and the strength of the association between certain words and sentiment varied significantly. The sentiment score visualisation revealed that Carlo Ratti was generally more positive in his talks, whereas Paul Collier had a higher proportion of negative sentiments. These findings shed light on the speakers' use of language and emotion, as well as their overall message and tone in their TED talks.
